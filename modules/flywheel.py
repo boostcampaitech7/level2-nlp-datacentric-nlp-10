@@ -81,8 +81,14 @@ class flywheel:
         return result
     
     def inference_and_cleanlab(self):
-        text_cleaned_data = self.text_cleaning(self.contaminated_text_data)
-        all_data = pd.concat([text_cleaned_data, self.contaminated_label_data]).reset_index(drop = True)
+        if len(self.contaminated_text_data) > 0:
+            text_cleaned_data = self.text_cleaning(self.contaminated_text_data)
+            all_data = pd.concat([text_cleaned_data, self.contaminated_label_data]).reset_index(drop = True)
+            all_data['len'] = all_data['text'].apply(lambda x: len(x))
+            all_data = all_data[all_data['len'] < 70].reset_index(drop = True)
+        else:
+            all_data = self.contaminated_label_data
+
         origin_data = all_data.copy()
         labels = all_data['target'].copy()
         model = baselinemodel()
@@ -101,18 +107,22 @@ class flywheel:
         gc.collect()
         torch.cuda.empty_cache()
     
-    def make_new_data(self):
+    def make_new_data(self, cnt):
         self.processed_data['abnormal'] = self.processed_data['text'].apply(self.is_abnormal)
 
         model = BackTranslator()
         back_translated = []
         text_clean_data = self.processed_data[~self.processed_data['abnormal']]
+        cnt = min(cnt, len(text_clean_data))
+        print(f'역번역과 LLM증강으로 각각 {cnt}개의 데이터를 만듭니다.')
         print('텍스트가 정상인 데이터의 수 :', len(text_clean_data))
         print('텍스트가 정상인 데이터를 역번역으로 증강합니다.')
-        for idx, item in tqdm(enumerate(text_clean_data.iterrows())):
-            tmp = {'ID' : f'aug_{idx}', 
-                   'text' : model.back_translate(item['text']),
-                   'target' : item['target']}
+        for idx, row in tqdm(text_clean_data.sample(cnt).iterrows()):
+            tmp = {
+                'ID': f'aug_{idx}',  # 원래 인덱스를 그대로 사용
+                'text': model.back_translate(row['text']),
+                'target': row['target']
+            }
             back_translated.append(tmp)
         back_translated = pd.DataFrame(back_translated)
         del model
@@ -120,11 +130,11 @@ class flywheel:
         torch.cuda.empty_cache()
         model = augmentation()
         print('테스트가 정상인 데이터를 LLM을 통해 증강합니다.')
-        regenerated = model.generate_synonym_data(text_clean_data)
+        regenerated = model.generate_synonym_data(text_clean_data.sample(cnt))
         regenerated['len'] = regenerated['text'].apply(lambda x: len(x))
-        regenerated = regenerated[regenerated['len'] < 100]
+        regenerated = regenerated[regenerated['len'] < 70]
         print('이상하게 증강된 데이터를 삭제합니다.')
-        print('이상하게 증강된 데이터의 개수 :', len(regenerated['len']>=100))
+        print('이상하게 증강된 데이터의 개수 :', len(regenerated['len'] >= 70))
 
         del model
         gc.collect()
