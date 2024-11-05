@@ -5,7 +5,7 @@ import re
 import pandas as pd
 import numpy as np
 
-class augumentation:
+class augumentation_solar:
     def __init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained("Upstage/SOLAR-10.7B-Instruct-v1.0")
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -20,12 +20,18 @@ class augumentation:
             {"role": "user", "content": f"{instruction}"}
             ]
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+        
+        # 모델을 사용해 텍스트 생성
+        outputs = self.model.generate(**inputs, use_cache=True, max_length=200, temperature=temperature)
+        
+        # 텍스트 디코딩
+        output_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        generated_text = output_text[len(prompt):].strip()
+        generated_text = re.sub(r'"([^"]*)"', r'\1', generated_text)
 
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device) 
-        outputs = self.model.generate(**inputs, use_cache=True, max_length = 200, temperature = temperature)
-        output_text = self.tokenizer.decode(outputs[0]) 
-        print(output_text)
-
+        return generated_text
+    
     def generate_random_data(self, cnt):
         aug = []
         for i in tqdm(range(cnt)):
@@ -34,7 +40,6 @@ class augumentation:
             당신은 기자의 어시스턴트 입니다. 사용자의 질문에 대한 기사 제목을 만들어 주세요.'''
             instruction = f"다양한 주제로 뉴스 기사 제목을 한개만 만들어 줘."
             text = self.generate(PROMPT, instruction, temperature)[1:-1]
-            text = re.sub(r'"([^"]*)"', r'\1', text)
             tmp = {'ID' : f'aug{i}', 'text' : text, 'target' : -1}
             aug.append(tmp)
 
@@ -51,7 +56,6 @@ class augumentation:
             instruction = f"아래에 주어진 문장을 읽고 정상적인 한국어 문장으로 고쳐줘:\n\n'{row['text']}'"
             
             text = self.generate(PROMPT, instruction, temperature)
-            text = re.sub(r'"([^"]*)"', r'\1', text)
             tmp = {'ID': f'aug{idx}', 'text': text, 'target': row['target']}
             aug.append(tmp)
         aug_df = pd.DataFrame(aug)
@@ -67,7 +71,6 @@ class augumentation:
 
             instruction = f"아래 문장과 동일한 의미를 갖는 새로운 문장을 하나만 만들어줘:\n\n'{row['text']}'"
             text = self.generate(PROMPT, instruction, temperature)
-            text = re.sub(r'"([^"]*)"', r'\1', text)
             tmp = {'ID': f'aug{idx}', 'text': text, 'target': row['target']}
             aug.append(tmp)
         aug_df = pd.DataFrame(aug)

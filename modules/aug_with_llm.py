@@ -44,8 +44,10 @@ class augmentation:
             temperature=temperature,
             top_p=0.9
         )
+        output = outputs[0]['generated_text'][len(prompt):]
+        output = re.sub(r'"([^"]*)"', r'\1', output)
 
-        return outputs[0]["generated_text"][len(prompt):]
+        return output
     
     def generate_random_data(self, cnt):
         aug = []
@@ -55,7 +57,6 @@ class augmentation:
             당신은 기자의 어시스턴트 입니다. 사용자의 질문에 대한 기사 제목을 만들어 주세요.'''
             instruction = f"다양한 주제로 뉴스 기사 제목을 한개만 만들어 줘."
             text = self.generate(PROMPT, instruction, temperature)[1:-1]
-            text = re.sub(r'"([^"]*)"', r'\1', text)
             tmp = {'ID' : f'aug{i}', 'text' : text, 'target' : -1}
             aug.append(tmp)
 
@@ -72,7 +73,6 @@ class augmentation:
             instruction = f"아래에 주어진 문장을 읽고 정상적인 한국어 문장으로 고쳐줘:\n\n'{row['text']}'"
             
             text = self.generate(PROMPT, instruction, temperature)
-            text = re.sub(r'"([^"]*)"', r'\1', text)
             tmp = {'ID': f'aug{idx}', 'text': text, 'target': row['target']}
             aug.append(tmp)
         aug_df = pd.DataFrame(aug)
@@ -88,7 +88,6 @@ class augmentation:
 
             instruction = f"아래 문장과 동일한 의미를 갖는 새로운 문장을 하나만 만들어줘:\n\n'{row['text']}'"
             text = self.generate(PROMPT, instruction, temperature)
-            text = re.sub(r'"([^"]*)"', r'\1', text)
             tmp = {'ID': f'aug{idx}', 'text': text, 'target': row['target']}
             aug.append(tmp)
         aug_df = pd.DataFrame(aug)
