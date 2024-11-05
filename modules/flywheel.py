@@ -143,26 +143,47 @@ class flywheel:
         print('발견한 라벨이슈 :', len(label_issues))
         print(origin_data.loc[label_issues, 'target'].head(5))
         print(all_data.loc[label_issues, 'target'].head(5))
-        origin_data.loc[label_issues, 'target'] = all_data.loc[label_issues, 'target']
-        self.processed_data = origin_data
-        print('텍스트를 고친 데이터 + 라벨이 이상한 데이터 :',len(origin_data))
+        # origin_data.loc[label_issues, 'target'] = all_data.loc[label_issues, 'target']
+
         del model
         gc.collect()
         torch.cuda.empty_cache()
+
+        issue_data = origin_data.loc[label_issues]
+        correct_data = issue_data
+        model = augmentation()
+        correct_data = model.generated_correct_data(correct_data)
+        origin_data = origin_data.drop(label_issues)
+        origin_data = pd.concat([origin_data, correct_data], ignore_index = True).reset_index(drop = True)
+
+        self.processed_data = origin_data
+        print('텍스트를 고친 데이터 + 라벨이 이상한 데이터 :',len(origin_data))
     
     def make_new_data(self, cnt, name = 'llama'):
         self.processed_data['abnormal'] = self.processed_data['text'].apply(self.is_abnormal)
+        mm = self.processed_data['target'].value_counts().max() + cnt
         text_clean_data = self.processed_data[~self.processed_data['abnormal']]
-        cnt = min(cnt, len(text_clean_data))
 
         print(f'역번역과 LLM증강으로 각각 {cnt}개의 데이터를 만듭니다.')
         print('텍스트가 정상인 데이터의 수 :', len(text_clean_data))
         print('텍스트가 정상인 데이터를 역번역으로 증강합니다.')
 
-        back_translated = self.backtranslation(text_clean_data.sample(cnt))
+        back_translated = pd.DataFrame()
+        for i in range(7):
+            tmp = self.processed_data[self.processed_data['target'] == i]
+            back = self.backtranslation(tmp.sample(mm - tmp['target'].count()))
+            back_translated = pd.concat([back_translated, back])
+
+        new_data = pd.concat([self.processed_data, back_translated])
+        mm = new_data['target'].value_counts().max() + cnt
 
         print('테스트가 정상인 데이터를 LLM을 통해 증강합니다.')
-        regenerated = self.text_synonym(text_clean_data.sample(cnt), name)
+        regenerated = pd.DataFrame()
+        for i in range(7):
+            tmp = self.processed_data[self.processed_data['target'] == i]
+            regen = self.text_synonym(tmp.sample(mm - tmp['target'].count()))
+            regenerated = pd.concat([regenerated, regen])
+
         print('이상하게 증강된 데이터를 삭제합니다.')
         regenerated['len'] = regenerated['text'].apply(lambda x: len(x))
         abnormal_count = (regenerated['len'] >= 70).sum()  # 70 이상인 데이터 수 계산
@@ -171,8 +192,9 @@ class flywheel:
         regenerated = regenerated[regenerated['len'] < 70]  # 70 이상인 데이터 삭제
 
         # 새로운 데이터 합치기
-        new_data = pd.concat([regenerated, back_translated, self.processed_data])[['ID', 'text', 'target']].reset_index(drop=True)
-        new_data = new_data[~new_data['text'].str.contains('문장은')]
+        new_data = pd.concat([new_data, regenerated])[['ID', 'text', 'target']].reset_index(drop=True)
+        new_data = new_data[~new_data['text'].str.contains('문장')]
+        new_data['text'] = new_data['text'].apply(lambda x: x.strip("'"))
         print('역번역 데이터 + 재구성 데이터 + label cleaning 데이터의 개수 :', len(new_data))
         new_data.to_csv('/data/ephemeral/home/datacentric/processed_train.csv', index = False)
         

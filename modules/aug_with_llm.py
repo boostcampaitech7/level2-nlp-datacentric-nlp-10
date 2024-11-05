@@ -93,3 +93,23 @@ class augmentation:
         aug_df = pd.DataFrame(aug)
 
         return aug_df
+    
+    def generated_correct_data(self, df):
+        keywords = [['이란', '미국', '공격', '제재', '북한', '협상', '총리', '이스라엘'],
+                    ['시즌', '연패', '우승', '류현진', '연봉','타율', '감독'],
+                    ['대통령', '북한', '미국', '시장', '러시아', '이란'],
+                    ['정책', '추진', '조직', '국회', '국가', '경제 정책', '통합', '국민의당'],
+                    [], [], []]
+        aug = []
+        for index, row in tqdm(df.iterrows()):
+            temperature = np.random.uniform(0.6, 0.95)
+            PROMPT = '''You are a helpful AI assistant. Please answer the user's questions kindly.
+                    당신은 문장을 재구성하는 전문가입니다. 원래 문장과 몇 가지 키워드가 주어졌을 때, 이 키워드 중 몇 가지를 사용하여 새로운 문장을 만들어주세요.'''
+
+            instruction = f"주어진 키워드를 사용하여 새로운 문장을 한 개 만들어 주세요:\n\n원래 문장: '{row['text']}'\n키워드: {keywords[row['target']]}"
+            text = self.generate(PROMPT, instruction, temperature)
+            tmp = {'ID': f'aug{index}', 'text': text, 'target': row['target']}
+            aug.append(tmp)
+        aug_df = pd.DataFrame(aug)
+        
+        return aug_df
