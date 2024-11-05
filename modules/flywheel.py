@@ -20,6 +20,7 @@ class flywheel:
             self.route = "/data/ephemeral/home/code/data/train.csv"
 
         origin_data = pd.read_csv(self.route).dropna()
+        origin_data = origin_data[origin_data['text'].apply(lambda x: len(x)) > 10]
         if self.route == "/data/ephemeral/home/datacentric/processed_train.csv":
             origin_data = origin_data[~origin_data['text'].str.contains('문장')]
             origin_data = self.balance_target_data(origin_data).reset_index(drop = True)
@@ -144,17 +145,22 @@ class flywheel:
         print(origin_data.loc[label_issues, 'target'].head(5))
         print(all_data.loc[label_issues, 'target'].head(5))
         # origin_data.loc[label_issues, 'target'] = all_data.loc[label_issues, 'target']
-
+        model.result['max_logits'] = model.result['logits'].apply(lambda x: max(x))
+        low_logit_idxs = model.result[model.result['max_logits'] < 0.8].index
         del model
         gc.collect()
         torch.cuda.empty_cache()
 
         issue_data = origin_data.loc[label_issues]
-        correct_data = issue_data
+        low_logit_data = origin_data.loc[low_logit_idxs]
+
         model = augmentation()
-        correct_data = model.generated_correct_data(correct_data)
+        correct_data = model.generate_correct_data(issue_data)
+        print('logit이 낮은 데이터를 보강합니다.')
+        correct_data2 = model.generate_correct_data(low_logit_data)
         origin_data = origin_data.drop(label_issues)
-        origin_data = pd.concat([origin_data, correct_data], ignore_index = True).reset_index(drop = True)
+
+        origin_data = pd.concat([origin_data, correct_data, correct_data2], ignore_index = True).reset_index(drop = True)
 
         self.processed_data = origin_data
         print('텍스트를 고친 데이터 + 라벨이 이상한 데이터 :',len(origin_data))
@@ -173,6 +179,9 @@ class flywheel:
             tmp = self.processed_data[self.processed_data['target'] == i]
             back = self.backtranslation(tmp.sample(mm - tmp['target'].count()))
             back_translated = pd.concat([back_translated, back])
+            torch.cuda.empty_cache()
+            gc.collect()
+
 
         new_data = pd.concat([self.processed_data, back_translated])
         mm = new_data['target'].value_counts().max() + cnt
@@ -183,6 +192,8 @@ class flywheel:
             tmp = self.processed_data[self.processed_data['target'] == i]
             regen = self.text_synonym(tmp.sample(mm - tmp['target'].count()))
             regenerated = pd.concat([regenerated, regen])
+            torch.cuda.empty_cache()
+            gc.collect()
 
         print('이상하게 증강된 데이터를 삭제합니다.')
         regenerated['len'] = regenerated['text'].apply(lambda x: len(x))
