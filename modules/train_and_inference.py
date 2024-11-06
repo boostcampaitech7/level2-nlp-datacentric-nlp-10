@@ -47,10 +47,9 @@ class BERTDataset(Dataset):
         return len(self.labels)
     
 class baselinemodel():
-    def __init__(self):
-        self.model_name = 'klue/bert-base'
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name, num_labels=7).to(DEVICE)
+    def __init__(self, model_name = 'klue/bert-base'):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=7).to(DEVICE)
         data = pd.read_csv('/data/ephemeral/home/code/data/train.csv')
         dataset_train, dataset_valid = train_test_split(data, test_size=0.3, random_state=SEED)
         self.f1 = evaluate.load('f1')
@@ -91,8 +90,8 @@ class baselinemodel():
             adam_epsilon=1e-08,
             weight_decay=0.01,
             lr_scheduler_type='linear',
-            per_device_train_batch_size=32,
-            per_device_eval_batch_size=32,
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
             num_train_epochs=2,
             load_best_model_at_end=True,
             metric_for_best_model='eval_f1',
