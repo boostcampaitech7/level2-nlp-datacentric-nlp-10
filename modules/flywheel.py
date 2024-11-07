@@ -12,7 +12,6 @@ import os
 from aug_with_solar import augumentation_solar
 
 class flywheel:
-    # 만약 이전에 처리된 데이터가 있다면 그 데이터를 대상으로 불러오고, 이전에 처리된 데이터가 없다면 복구된 데이터를 불러옵니다.
     def __init__(self, route = "/data/ephemeral/home/datacentric/processed_train.csv"):
         self.route = route
         
@@ -24,6 +23,7 @@ class flywheel:
         if self.route == "/data/ephemeral/home/datacentric/processed_train.csv":
             origin_data = origin_data[~origin_data['text'].str.contains('문장')]
             origin_data = self.balance_target_data(origin_data).reset_index(drop = True)
+        origin_data.loc[origin_data['text'].str.contains('북한', na=False), 'target'] = 2
         origin_data['abnormal'] = origin_data['text'].apply(self.is_abnormal)
         print(f"이상으로 판단된 train의 수 : {len(origin_data[origin_data.abnormal])}\n")
 
@@ -80,8 +80,6 @@ class flywheel:
         return any(re.search(pattern, text) for pattern in abnormal_patterns)
     
     def text_cleaning(self, df, name = 'llama'):
-        gc.collect()
-        torch.cuda.empty_cache()
         if name == 'llama':
             model = augmentation()
         elif name == 'solar':
@@ -93,8 +91,6 @@ class flywheel:
         return result
     
     def text_synonym(self, df, name = 'llama'):
-        gc.collect()
-        torch.cuda.empty_cache()
         if name == 'llama':
             model = augmentation()
         elif name == 'solar':
@@ -159,7 +155,6 @@ class flywheel:
         low_logit_data = origin_data.loc[low_logit_idxs]
 
         model = augmentation()
-        print('issue_data들을 보강합니다.')
         correct_data = model.generate_correct_data(issue_data)
         print('logit이 낮은 데이터를 보강합니다.')
         correct_data2 = model.generate_correct_data(low_logit_data)
@@ -216,7 +211,6 @@ class flywheel:
         new_data = new_data[~new_data['text'].str.contains('문장')]
         new_data = new_data[~new_data['text'].str.contains('기사 제목')]
         new_data['text'] = new_data['text'].apply(lambda x: x.strip("'"))
-        # 잘못 증강된 데이터들을 필터링
         print('역번역 데이터 + 재구성 데이터 + label cleaning 데이터의 개수 :', len(new_data))
         new_data.to_csv('/data/ephemeral/home/datacentric/processed_train.csv', index = False)
         
