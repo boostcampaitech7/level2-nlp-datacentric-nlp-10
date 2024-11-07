@@ -38,7 +38,7 @@ class augmentation:
 
         outputs = self.pipeline(
             prompt,
-            max_new_tokens=2048,
+            max_new_tokens=50,
             eos_token_id=terminators,
             do_sample=True,
             temperature=temperature,
@@ -96,20 +96,25 @@ class augmentation:
     # 0 - 생활문화 / 1 - 스포츠 / 2 - 국내정치 / 3 - 사회 / 4 - IT과학 / 5 - 경제 / 6 - 세계
 
     def generate_correct_data(self, df):
-        keywords = [['축제', '여행', '날씨', '제주', '비', '공연', '연주', '남쪽'],
-                    ['시즌', '프로', '우승', '축구', '연봉','타율', '감독', '농구', '리그','올림픽'],
-                    ['대통령', '북한', '김정은', '후보', '민주', '이란', '회의', '정상회담', '핵'],
-                    ['학교', '교육', '조직', '국회', '경찰', '경제 정책', '통합', '국민의당'],
-                    ['갤럭시', '아이폰', '삼성', '개발', '스마트폰', '네이버', '서비스', '기술'],
-                    ['투자', '코스피' ,'주식', '은행', '증권', '하락', '대출', '영업'],
-                    ['이란', '미국', '영국', '트럼프', '홍콩' ,'대한', '한국', '중국']]
+        # 토픽 모델링을 통해 얻은 라벨별 토픽들을 keyword로 사용합니다.
+        a = pd.read_csv('/data/ephemeral/home/datacentric/아카이브/target_0_drop_df.csv')
+        b = pd.read_csv('/data/ephemeral/home/datacentric/아카이브/target_1_drop_df.csv')
+        c = pd.read_csv('/data/ephemeral/home/datacentric/아카이브/target_2_drop_df.csv')
+        d = pd.read_csv('/data/ephemeral/home/datacentric/아카이브/target_3_drop_df.csv')
+        e = pd.read_csv('/data/ephemeral/home/datacentric/아카이브/target_4_drop_df.csv')
+        f = pd.read_csv('/data/ephemeral/home/datacentric/아카이브/target_5_drop_df.csv')
+        g = pd.read_csv('/data/ephemeral/home/datacentric/아카이브/target_6_drop_df.csv')
+
+
         aug = []
+        keywords = [a['word'].values,b['word'].values,c['word'].values,d['word'].values,e['word'].values,f['word'].values,g['word'].values]
+
         for index, row in tqdm(df.iterrows()):
             temperature = np.random.uniform(0.6, 0.95)
             PROMPT = '''You are a helpful AI assistant. Please answer the user's questions kindly.
-                    당신은 문장을 재구성하는 전문가입니다. 원래 문장과 몇 가지 키워드가 주어졌을 때, 이 키워드 중 몇 가지를 사용하여 새로운 문장을 만들어주세요.'''
+                    당신은 문장을 재구성하는 전문가입니다. 원래 문장과 몇 가지 키워드가 주어졌을 때, 이 키워드 중 몇 가지를 사용하여 새로운 기사 제목을 만들어주세요.'''
 
-            instruction = f"주어진 키워드를 사용하여 새로운 문장을 한 개 만들어 주세요:\n\n원래 문장: '{row['text']}'\n키워드: {keywords[row['target']]}"
+            instruction = f"주어진 키워드를 사용하여 40자 이내의 새로운 기사 제목을 한 개 만들어 주세요:\n\n원래 문장: '{row['text']}'\n키워드: {keywords[row['target']]}"
             text = self.generate(PROMPT, instruction, temperature)
             tmp = {'ID': f'aug{index}', 'text': text, 'target': row['target']}
             aug.append(tmp)

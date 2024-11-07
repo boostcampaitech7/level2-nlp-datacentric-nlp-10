@@ -12,12 +12,12 @@ import os
 from aug_with_solar import augumentation_solar
 
 class flywheel:
-    def __init__(self):
-        # route = "/data/ephemeral/home/datacentric/processed_train.csv"
-        self.route = '/data/ephemeral/home/datacentric/processed_train.csv'
+    # 만약 이전에 처리된 데이터가 있다면 그 데이터를 대상으로 불러오고, 이전에 처리된 데이터가 없다면 복구된 데이터를 불러옵니다.
+    def __init__(self, route = "/data/ephemeral/home/datacentric/processed_train.csv"):
+        self.route = route
         
         if not os.path.exists(self.route):
-            self.route = "/data/ephemeral/home/code/data/train.csv"
+            self.route = "/data/ephemeral/home/code/data/train_denoised_none.csv"
 
         origin_data = pd.read_csv(self.route).dropna()
         origin_data = origin_data[origin_data['text'].apply(lambda x: len(x)) > 10]
@@ -80,6 +80,8 @@ class flywheel:
         return any(re.search(pattern, text) for pattern in abnormal_patterns)
     
     def text_cleaning(self, df, name = 'llama'):
+        gc.collect()
+        torch.cuda.empty_cache()
         if name == 'llama':
             model = augmentation()
         elif name == 'solar':
@@ -91,6 +93,8 @@ class flywheel:
         return result
     
     def text_synonym(self, df, name = 'llama'):
+        gc.collect()
+        torch.cuda.empty_cache()
         if name == 'llama':
             model = augmentation()
         elif name == 'solar':
@@ -132,8 +136,8 @@ class flywheel:
         origin_data = all_data.copy()
         labels = all_data['target'].copy()
         model = baselinemodel(model_name = 'klue/roberta-large')
-        if self.route == '/data/ephemeral/home/code/data/train.csv':
-            train_data = pd.read_csv('/data/ephemeral/home/code/data/train_denoised_none.csv').dropna()
+        if self.route == '/data/ephemeral/home/code/data/train_denoised_none.csv':
+            train_data = pd.read_csv('/data/ephemeral/home/level2-nlp-datacentric-nlp-10/noise_fix_label_right.csv').dropna()
             model.train(train_data)
         else:
             model.train(all_data)
@@ -144,7 +148,7 @@ class flywheel:
         print('발견한 라벨이슈 :', len(label_issues))
         print(origin_data.loc[label_issues, 'target'].head(5))
         print(all_data.loc[label_issues, 'target'].head(5))
-        # origin_data.loc[label_issues, 'target'] = all_data.loc[label_issues, 'target']
+        origin_data.loc[label_issues, 'target'] = all_data.loc[label_issues, 'target']
         model.result['max_logits'] = model.result['logits'].apply(lambda x: max(x))
         low_logit_idxs = model.result[model.result['max_logits'] < 0.8].index
         del model
@@ -155,13 +159,18 @@ class flywheel:
         low_logit_data = origin_data.loc[low_logit_idxs]
 
         model = augmentation()
+        print('issue_data들을 보강합니다.')
         correct_data = model.generate_correct_data(issue_data)
         print('logit이 낮은 데이터를 보강합니다.')
         correct_data2 = model.generate_correct_data(low_logit_data)
-        origin_data = origin_data.drop(label_issues)
+        # drop_labels = set(label_issues).union(set(low_logit_idxs))
+        # origin_data = origin_data.drop(drop_labels)
 
         origin_data = pd.concat([origin_data, correct_data, correct_data2], ignore_index = True).reset_index(drop = True)
 
+        
+        filter_condition = origin_data['text'].str.contains('원래|문장|기사|키워드|문장', na=False)
+        origin_data = origin_data[~filter_condition].reset_index(drop=True)
         self.processed_data = origin_data
         print('텍스트를 고친 데이터 + 라벨이 이상한 데이터 :',len(origin_data))
     
@@ -205,7 +214,9 @@ class flywheel:
         # 새로운 데이터 합치기
         new_data = pd.concat([new_data, regenerated])[['ID', 'text', 'target']].reset_index(drop=True)
         new_data = new_data[~new_data['text'].str.contains('문장')]
+        new_data = new_data[~new_data['text'].str.contains('기사 제목')]
         new_data['text'] = new_data['text'].apply(lambda x: x.strip("'"))
+        # 잘못 증강된 데이터들을 필터링
         print('역번역 데이터 + 재구성 데이터 + label cleaning 데이터의 개수 :', len(new_data))
         new_data.to_csv('/data/ephemeral/home/datacentric/processed_train.csv', index = False)
         
